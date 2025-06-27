@@ -185,10 +185,10 @@ def handle_input(user_input):
         "calendar", "do i", "check", "show me"
     ])
 
-    if is_booking:
-        return handle_booking(user_input)
-    elif is_checking:
+    if is_checking:
         return handle_query(user_input)
+    elif is_booking:
+        return handle_booking(user_input)
     else:
         return handle_booking(user_input)
 
