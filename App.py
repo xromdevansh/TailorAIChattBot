@@ -78,9 +78,16 @@ def handle_query(user_input):
     if "week" in lower:
         start = now
         end = now + datetime.timedelta(days=7)
+
     elif "right now" in lower:
         start = now
         end = now + datetime.timedelta(minutes=30)
+
+    elif "tomorrow" in lower:
+        start = now + datetime.timedelta(days=1)
+        start = start.replace(hour=0, minute=0, second=0, microsecond=0)
+        end = start + datetime.timedelta(days=1)
+
     else:
         start, end = extract_datetime_range(user_input)
         if not start or not end:
@@ -105,7 +112,15 @@ def handle_booking(user_input):
 
 def handle_input(user_input):
     lower = user_input.lower()
-    if any(x in lower for x in ["do i have", "am i free", "appointment", "next week", "right now", "at this time"]):
+
+    # Extended intent detection
+    is_checking = any(kw in lower for kw in [
+        "do i have", "am i free", "anything booked", 
+        "appointment", "what's scheduled", "is anything", 
+        "free on", "available", "booked for", "calendar"
+    ])
+
+    if is_checking:
         return handle_query(user_input)
     else:
         return handle_booking(user_input)
@@ -165,7 +180,7 @@ if "history" not in st.session_state:
     st.session_state.history = []
 
 # Chat
-user_input = st.chat_input("Type something like 'Next Monday 5PM'...")
+user_input = st.chat_input("Type something like 'Next Monday 5PM' or 'Am I booked tomorrow?'")
 if user_input:
     st.session_state.history.append(("user", user_input))
     with st.spinner("🧠 Thinking like a calendar ninja..."):
