@@ -29,6 +29,7 @@ IST = timezone("Asia/Kolkata")
 
 def extract_datetime_range(text):
     lowered_text = text.lower()
+    now = datetime.datetime.now(IST)
     results = search_dates(
         lowered_text,
         settings={
@@ -41,7 +42,7 @@ def extract_datetime_range(text):
     if not results:
         return None, None
 
-    parsed_text, parsed = results[0]
+    _, parsed = results[0]
 
     if "afternoon" in lowered_text:
         parsed = parsed.replace(hour=14, minute=0)
@@ -57,13 +58,32 @@ def extract_datetime_range(text):
 
     parsed = parsed.replace(tzinfo=IST)
 
+    # Ensure future
+    if parsed <= now:
+        parsed += datetime.timedelta(days=1)
+
     start_time = parsed
     end_time = parsed + datetime.timedelta(minutes=DEFAULT_DURATION_MINUTES)
     return start_time, end_time
 
 def is_available(start_time, end_time):
-    events = get_events_between(start_time, end_time)
-    return len(events) == 0
+    events = service.events().list(
+        calendarId=CALENDAR_ID,
+        timeMin=start_time.isoformat(),
+        timeMax=end_time.isoformat(),
+        singleEvents=True,
+        orderBy='startTime'
+    ).execute()
+    return len(events.get('items', [])) == 0
+
+def find_next_available(start_time, end_time, attempts=10):
+    step = datetime.timedelta(minutes=15)
+    for _ in range(attempts):
+        if is_available(start_time, end_time):
+            return start_time, end_time
+        start_time += step
+        end_time += step
+    return None, None
 
 def get_events_between(start_time, end_time):
     if start_time.tzinfo is None:
@@ -140,15 +160,17 @@ def handle_query(user_input):
         return "✅ You're totally free during that time!"
 
 def handle_booking(user_input):
-    start, end = extract_datetime_range(user_input)
-    if not start or not end:
+    raw_start, raw_end = extract_datetime_range(user_input)
+    if not raw_start or not raw_end:
         return "🕵️‍♂️ Hmm... I couldn’t get the date/time. Try something like 'Book 5th July 3PM'."
-    if is_available(start, end):
+
+    start, end = find_next_available(raw_start, raw_end)
+    if start and end:
         readable_time = start.strftime('%A, %d %B %Y at %I:%M %p')
         st.session_state.pending_booking = (start, end)
         return f"🤖 I found a free slot on {readable_time}. Should I book it for you? (Type 'yes' to confirm)"
     else:
-        return f"🚫 That time's already taken: {start.strftime('%A, %d %B %Y at %I:%M %p')}. Try something else."
+        return f"🚫 Couldn't find a free slot near that time. Try a different time or day."
 
 def handle_input(user_input):
     lower = user_input.lower()
