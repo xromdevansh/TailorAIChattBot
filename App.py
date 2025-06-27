@@ -7,8 +7,6 @@ from googleapiclient.discovery import build
 from dateparser.search import search_dates
 import re
 import calendar
-from pytz import timezone
-
 # Load secrets
 GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 genai.configure(api_key=GEMINI_API_KEY)
@@ -23,14 +21,13 @@ service = build('calendar', 'v3', credentials=credentials)
 CALENDAR_ID = 'primary'
 
 DEFAULT_DURATION_MINUTES = 30
-IST = timezone("Asia/Kolkata")
 
 # ------------------ UTIL FUNCTIONS ------------------
 
 def extract_datetime_range(text):
-    lowered_text = text.lower()
+    # Try extracting time with dateparser
     results = search_dates(
-        lowered_text,
+        text,
         settings={
             'PREFER_DATES_FROM': 'future',
             'TIMEZONE': 'Asia/Kolkata',
@@ -42,39 +39,38 @@ def extract_datetime_range(text):
         return None, None
 
     parsed_text, parsed = results[0]
-
-    if "afternoon" in lowered_text:
+    
+    # If vague term is used, adjust time
+    if "afternoon" in text.lower():
         parsed = parsed.replace(hour=14, minute=0)
-    elif "evening" in lowered_text:
+    elif "evening" in text.lower():
         parsed = parsed.replace(hour=18, minute=0)
-    elif "morning" in lowered_text:
+    elif "morning" in text.lower():
         parsed = parsed.replace(hour=9, minute=0)
-    elif "night" in lowered_text:
+    elif "night" in text.lower():
         parsed = parsed.replace(hour=21, minute=0)
-
-    parsed = parsed.replace(tzinfo=IST)
 
     start_time = parsed
     end_time = parsed + datetime.timedelta(minutes=DEFAULT_DURATION_MINUTES)
     return start_time, end_time
 
-
 def is_available(start_time, end_time):
     events = service.events().list(
         calendarId=CALENDAR_ID,
-        timeMin=start_time.isoformat(),
-        timeMax=end_time.isoformat(),
+        timeMin=start_time.isoformat() + 'Z',
+        timeMax=end_time.isoformat() + 'Z',
         singleEvents=True,
         orderBy='startTime'
     ).execute()
     return len(events.get('items', [])) == 0
 
-
 def get_events_between(start_time, end_time):
+    # Ensure both times are timezone-aware (Asia/Kolkata)
+    tz = datetime.timezone(datetime.timedelta(hours=5, minutes=30))  # IST
     if start_time.tzinfo is None:
-        start_time = start_time.replace(tzinfo=IST)
+        start_time = start_time.replace(tzinfo=tz)
     if end_time.tzinfo is None:
-        end_time = end_time.replace(tzinfo=IST)
+        end_time = end_time.replace(tzinfo=tz)
 
     events_result = service.events().list(
         calendarId=CALENDAR_ID,
@@ -84,7 +80,6 @@ def get_events_between(start_time, end_time):
         orderBy='startTime'
     ).execute()
     return events_result.get('items', [])
-
 
 def create_appointment(summary, start_time, end_time):
     event = {
@@ -97,10 +92,13 @@ def create_appointment(summary, start_time, end_time):
 
 # ------------------ HANDLERS ------------------
 
+
+
 def handle_query(user_input):
     lower = user_input.lower()
-    now = datetime.datetime.now(IST)
+    now = datetime.datetime.now()
 
+    # Match common patterns
     if "next week" in lower or "coming week" in lower:
         today = now
         days_ahead = 7 - today.weekday()
@@ -109,10 +107,12 @@ def handle_query(user_input):
         end = start + datetime.timedelta(days=7)
 
     elif "tomorrow" in lower:
-        start = (now + datetime.timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        start = now + datetime.timedelta(days=1)
+        start = start.replace(hour=0, minute=0, second=0, microsecond=0)
         end = start + datetime.timedelta(days=1)
 
     else:
+        # Fallback for day names
         day_match = re.search(r"(on\s)?(monday|tuesday|wednesday|thursday|friday|saturday|sunday)", lower)
         if day_match:
             target_day = list(calendar.day_name).index(day_match.group(2).capitalize())
@@ -122,6 +122,7 @@ def handle_query(user_input):
             start = start.replace(hour=0, minute=0, second=0, microsecond=0)
             end = start + datetime.timedelta(days=1)
         else:
+            # Use regular date extraction
             start, _ = extract_datetime_range(user_input)
             if not start:
                 return "❓ I couldn't understand the time. Try saying something like 'Next Monday 3PM'."
@@ -139,11 +140,13 @@ def handle_query(user_input):
             key = f"{summary}-{start_time}"
             if key not in seen:
                 seen.add(key)
-                readable_time = datetime.datetime.fromisoformat(start_time.replace("Z", "+00:00")).astimezone(IST).strftime('%A, %d %B %Y at %I:%M %p')
+                readable_time = datetime.datetime.fromisoformat(start_time.replace("Z", "")).strftime('%A, %d %B %Y at %I:%M %p')
                 event_lines.append(f"📅 {summary} at {readable_time}")
         return "Here’s what’s on your calendar:\n" + "\n".join(event_lines)
     else:
         return "✅ You're totally free during that time!"
+
+
 
 
 def handle_booking(user_input):
@@ -157,14 +160,15 @@ def handle_booking(user_input):
     else:
         return f"🚫 That time's already taken: {start.strftime('%A, %d %B %Y at %I:%M %p')}. Try something else."
 
-
 def handle_input(user_input):
     lower = user_input.lower()
 
+    # Keywords that suggest booking
     is_booking = any(kw in lower for kw in [
         "book", "schedule", "make an appointment", "set up"
     ])
 
+    # Keywords that suggest checking availability or listing
     is_checking = any(kw in lower for kw in [
         "do i have", "am i free", "anything booked", "appointment",
         "what's scheduled", "is anything", "free on", "available",
@@ -176,79 +180,81 @@ def handle_input(user_input):
     elif is_checking:
         return handle_query(user_input)
     else:
+        # fallback: try to book by default
         return handle_booking(user_input)
 
-# ------------------ UI SECTION ------------------
+
+# ------------------ UI ------------------
 
 st.set_page_config(page_title="TailorTalk ✨", page_icon="🧠", layout="centered")
+
+# CSS
 st.markdown("""
-<style>
-body {
-    background-color: #f3f4f6;
-    font-family: 'Segoe UI', sans-serif;
-}
-
-.stApp {
-    max-width: 720px;
-    margin: auto;
-    padding: 2rem;
-}
-
-h1.title {
-    font-size: 2.5rem;
-    font-weight: bold;
-    color: #007acc;
-    text-align: center;
-    margin-bottom: 1.5rem;
-}
-
-.chat-bubble {
-    padding: 0.75rem 1rem;
-    border-radius: 1.2rem;
-    margin: 0.5rem 0;
-    max-width: 80%;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
-    line-height: 1.5;
-    word-break: break-word;
-}
-
-.chat-bubble.user {
-    background: linear-gradient(to right, #a1ffce, #faffd1);
-    align-self: flex-end;
-    text-align: right;
-}
-
-.chat-bubble.bot {
-    background-color: #ffffff;
-    border-left: 4px solid #007acc;
-    align-self: flex-start;
-}
-</style>
+    <style>
+    .stApp { font-family: 'Segoe UI', sans-serif; background-color: #fefefe; }
+    .chat-container {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        margin-top: 2rem;
+        padding: 1rem 1rem;
+    }
+    .user-msg {
+        background: linear-gradient(120deg, #a1ffce, #faffd1);
+        color: #111;
+        padding: 12px 18px;
+        border-radius: 20px 20px 0px 20px;
+        align-self: flex-end;
+        max-width: 80%;
+        font-size: 15px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .bot-msg {
+        background: #ffffffcc;
+        color: #222;
+        padding: 12px 18px;
+        border-radius: 20px 20px 20px 0px;
+        align-self: flex-start;
+        max-width: 80%;
+        font-size: 15px;
+        border-left: 4px solid #007acc;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .title-style {
+        font-size: 2.2rem;
+        font-weight: 700;
+        color: #1a1a1a;
+        background: linear-gradient(to right, #007acc, #00c3ff);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+    </style>
 """, unsafe_allow_html=True)
 
-st.markdown("<h1 class='title'>TailorTalk 🤖</h1>", unsafe_allow_html=True)
-st.caption("Your AI-powered scheduling assistant.")
+st.markdown("<h1 class='title-style'>TailorTalk 🤖</h1>", unsafe_allow_html=True)
+st.caption("Your AI-powered scheduling buddy. Just tell me when you're free!")
 
+# Session
 if "history" not in st.session_state:
     st.session_state.history = []
 
-user_input = st.chat_input("Ask me to schedule something...")
-
+# Chat
+user_input = st.chat_input("Type something like 'Next Monday 5PM' or 'Am I booked tomorrow?'")
 if user_input:
-    if "yes" in user_input.lower() and st.session_state.get("pending_booking"):
+      if "yes" in user_input.lower() and st.session_state.get("pending_booking"):
         start, end = st.session_state.pending_booking
         create_appointment("Meeting via TailorTalk", start, end)
         st.session_state.pending_booking = None
         reply = f"✅ Your appointment is confirmed for {start.strftime('%A, %d %B %Y at %I:%M %p')}!"
-    else:
+      else:
         reply = handle_input(user_input)
 
-    st.session_state.history.append(("user", user_input))
-    st.session_state.history.append(("bot", reply))
+      st.session_state.history.append(("user", user_input))
+      st.session_state.history.append(("bot", reply))
 
-# Display chat
-st.markdown("<div style='display:flex; flex-direction:column;'>", unsafe_allow_html=True)
+# Display Chat
+st.markdown("<div class='chat-container'>", unsafe_allow_html=True)
 for sender, msg in st.session_state.history:
-    msg_class = "user" if sender == "user" else "bot"
-    st.markdown(f"<div class='chat-bubble {msg_class}'>{msg}</div>", unsafe_allow_html=True)
+    msg_class = "user-msg" if sender == "user" else "bot-msg"
+    st.markdown(f"<div class='{msg_class}'>{msg}</div>", unsafe_allow_html=True)
 st.markdown("</div>", unsafe_allow_html=True)
