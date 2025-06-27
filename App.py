@@ -5,7 +5,8 @@ import google.generativeai as genai
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from dateparser.search import search_dates
-
+import re
+import calendar
 # Load secrets
 GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 genai.configure(api_key=GEMINI_API_KEY)
@@ -51,14 +52,21 @@ def is_available(start_time, end_time):
     return len(events.get('items', [])) == 0
 
 def get_events_between(start_time, end_time):
-    events = service.events().list(
+    # Ensure both times are timezone-aware (Asia/Kolkata)
+    tz = datetime.timezone(datetime.timedelta(hours=5, minutes=30))  # IST
+    if start_time.tzinfo is None:
+        start_time = start_time.replace(tzinfo=tz)
+    if end_time.tzinfo is None:
+        end_time = end_time.replace(tzinfo=tz)
+
+    events_result = service.events().list(
         calendarId=CALENDAR_ID,
-        timeMin=start_time.isoformat() + 'Z',
-        timeMax=end_time.isoformat() + 'Z',
+        timeMin=start_time.isoformat(),
+        timeMax=end_time.isoformat(),
         singleEvents=True,
         orderBy='startTime'
     ).execute()
-    return events.get('items', [])
+    return events_result.get('items', [])
 
 def create_appointment(summary, start_time, end_time):
     event = {
@@ -71,13 +79,16 @@ def create_appointment(summary, start_time, end_time):
 
 # ------------------ HANDLERS ------------------
 
+
+
 def handle_query(user_input):
     lower = user_input.lower()
     now = datetime.datetime.now()
 
+    # Match common patterns
     if "next week" in lower or "coming week" in lower:
-        today = datetime.datetime.now()
-        days_ahead = 7 - today.weekday()  # days until next Monday
+        today = now
+        days_ahead = 7 - today.weekday()
         start = today + datetime.timedelta(days=days_ahead)
         start = start.replace(hour=0, minute=0, second=0, microsecond=0)
         end = start + datetime.timedelta(days=7)
@@ -88,13 +99,22 @@ def handle_query(user_input):
         end = start + datetime.timedelta(days=1)
 
     else:
-        start, _ = extract_datetime_range(user_input)
-        if not start:
-            return "❓ I couldn't understand the time. Try something like 'Next Monday 3PM'."
-
-        # If only a date is mentioned, expand to full day range
-        start = start.replace(hour=0, minute=0, second=0, microsecond=0)
-        end = start + datetime.timedelta(days=1)
+        # Fallback for day names
+        day_match = re.search(r"(on\s)?(monday|tuesday|wednesday|thursday|friday|saturday|sunday)", lower)
+        if day_match:
+            target_day = list(calendar.day_name).index(day_match.group(2).capitalize())
+            today = now
+            days_ahead = (target_day - today.weekday() + 7) % 7
+            start = today + datetime.timedelta(days=days_ahead)
+            start = start.replace(hour=0, minute=0, second=0, microsecond=0)
+            end = start + datetime.timedelta(days=1)
+        else:
+            # Use regular date extraction
+            start, _ = extract_datetime_range(user_input)
+            if not start:
+                return "❓ I couldn't understand the time. Try saying something like 'Next Monday 3PM'."
+            start = start.replace(hour=0, minute=0, second=0, microsecond=0)
+            end = start + datetime.timedelta(days=1)
 
     events = get_events_between(start, end)
 
@@ -112,6 +132,7 @@ def handle_query(user_input):
         return "Here’s what’s on your calendar:\n" + "\n".join(event_lines)
     else:
         return "✅ You're totally free during that time!"
+
 
 
 
