@@ -177,3 +177,78 @@ def handle_input(user_input):
         return handle_query(user_input)
     else:
         return handle_booking(user_input)
+
+# ------------------ UI SECTION ------------------
+
+st.set_page_config(page_title="TailorTalk ✨", page_icon="🧠", layout="centered")
+st.markdown("""
+<style>
+body {
+    background-color: #f3f4f6;
+    font-family: 'Segoe UI', sans-serif;
+}
+
+.stApp {
+    max-width: 720px;
+    margin: auto;
+    padding: 2rem;
+}
+
+h1.title {
+    font-size: 2.5rem;
+    font-weight: bold;
+    color: #007acc;
+    text-align: center;
+    margin-bottom: 1.5rem;
+}
+
+.chat-bubble {
+    padding: 0.75rem 1rem;
+    border-radius: 1.2rem;
+    margin: 0.5rem 0;
+    max-width: 80%;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+    line-height: 1.5;
+    word-break: break-word;
+}
+
+.chat-bubble.user {
+    background: linear-gradient(to right, #a1ffce, #faffd1);
+    align-self: flex-end;
+    text-align: right;
+}
+
+.chat-bubble.bot {
+    background-color: #ffffff;
+    border-left: 4px solid #007acc;
+    align-self: flex-start;
+}
+</style>
+""", unsafe_allow_html=True)
+
+st.markdown("<h1 class='title'>TailorTalk 🤖</h1>", unsafe_allow_html=True)
+st.caption("Your AI-powered scheduling assistant.")
+
+if "history" not in st.session_state:
+    st.session_state.history = []
+
+user_input = st.chat_input("Ask me to schedule something...")
+
+if user_input:
+    if "yes" in user_input.lower() and st.session_state.get("pending_booking"):
+        start, end = st.session_state.pending_booking
+        create_appointment("Meeting via TailorTalk", start, end)
+        st.session_state.pending_booking = None
+        reply = f"✅ Your appointment is confirmed for {start.strftime('%A, %d %B %Y at %I:%M %p')}!"
+    else:
+        reply = handle_input(user_input)
+
+    st.session_state.history.append(("user", user_input))
+    st.session_state.history.append(("bot", reply))
+
+# Display chat
+st.markdown("<div style='display:flex; flex-direction:column;'>", unsafe_allow_html=True)
+for sender, msg in st.session_state.history:
+    msg_class = "user" if sender == "user" else "bot"
+    st.markdown(f"<div class='chat-bubble {msg_class}'>{msg}</div>", unsafe_allow_html=True)
+st.markdown("</div>", unsafe_allow_html=True)
