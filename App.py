@@ -94,11 +94,20 @@ def handle_query(user_input):
             return "❓ I couldn't understand the time. Try something like 'Next Monday 3PM'."
 
     events = get_events_between(start, end)
+
     if events:
-        event_lines = [f"📅 {e['summary']} at {e['start'].get('dateTime', e['start'].get('date'))}" for e in events]
+        seen = set()
+        event_lines = []
+        for e in events:
+            start_time = e['start'].get('dateTime', e['start'].get('date'))
+            event_key = (e['summary'], start_time)
+            if event_key not in seen:
+                seen.add(event_key)
+                event_lines.append(f"📅 {e['summary']} at {start_time}")
         return "Here’s what’s on your calendar:\n" + "\n".join(event_lines)
     else:
         return "✅ You're totally free during that time!"
+
 
 def handle_booking(user_input):
     start, end = extract_datetime_range(user_input)
