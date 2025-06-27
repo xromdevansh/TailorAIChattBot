@@ -82,19 +82,19 @@ def handle_query(user_input):
         start = start.replace(hour=0, minute=0, second=0, microsecond=0)
         end = start + datetime.timedelta(days=7)
 
-    elif "right now" in lower:
-        start = now
-        end = now + datetime.timedelta(minutes=30)
-
     elif "tomorrow" in lower:
         start = now + datetime.timedelta(days=1)
         start = start.replace(hour=0, minute=0, second=0, microsecond=0)
         end = start + datetime.timedelta(days=1)
 
     else:
-        start, end = extract_datetime_range(user_input)
-        if not start or not end:
+        start, _ = extract_datetime_range(user_input)
+        if not start:
             return "❓ I couldn't understand the time. Try something like 'Next Monday 3PM'."
+
+        # If only a date is mentioned, expand to full day range
+        start = start.replace(hour=0, minute=0, second=0, microsecond=0)
+        end = start + datetime.timedelta(days=1)
 
     events = get_events_between(start, end)
 
@@ -107,12 +107,12 @@ def handle_query(user_input):
             key = f"{summary}-{start_time}"
             if key not in seen:
                 seen.add(key)
-                # Format to readable datetime
                 readable_time = datetime.datetime.fromisoformat(start_time.replace("Z", "")).strftime('%A, %d %B %Y at %I:%M %p')
                 event_lines.append(f"📅 {summary} at {readable_time}")
         return "Here’s what’s on your calendar:\n" + "\n".join(event_lines)
     else:
         return "✅ You're totally free during that time!"
+
 
 
 def handle_booking(user_input):
