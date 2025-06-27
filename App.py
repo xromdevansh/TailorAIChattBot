@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 
 # Load environment
 load_dotenv()
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_API_KEY = st.secrets("GEMINI_API_KEY")
 
 # Configure Gemini
 genai.configure(api_key=GEMINI_API_KEY)
@@ -19,11 +19,11 @@ model = genai.GenerativeModel("gemini-pro")
 
 # Calendar API setup
 SCOPES = ['https://www.googleapis.com/auth/calendar']
-SERVICE_ACCOUNT_FILE = 'tailor-talk-agent-448fcde5f672.json'
 CALENDAR_ID = 'primary'
 
-credentials = service_account.Credentials.from_service_account_file(
-    SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+credentials = service_account.Credentials.from_service_account_info(
+    st.secrets["gcp_service_account"],
+    scopes=SCOPES)
 service = build('calendar', 'v3', credentials=credentials)
 
 # Utils
