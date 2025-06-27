@@ -25,6 +25,10 @@ DEFAULT_DURATION_MINUTES = 30
 # ------------------ UTIL FUNCTIONS ------------------
 
 def extract_datetime_range(text):
+    # Normalize input for keyword detection
+    lowered_text = text.lower()
+
+    # Try extracting time with dateparser
     results = search_dates(
         text,
         settings={
@@ -36,10 +40,23 @@ def extract_datetime_range(text):
     )
     if not results:
         return None, None
-    parsed = results[0][1]
+
+    parsed_text, parsed = results[0]
+    
+    # Adjust vague times based on keywords (case-insensitive)
+    if "afternoon" in lowered_text:
+        parsed = parsed.replace(hour=14, minute=0)
+    elif "evening" in lowered_text:
+        parsed = parsed.replace(hour=18, minute=0)
+    elif "morning" in lowered_text:
+        parsed = parsed.replace(hour=9, minute=0)
+    elif "night" in lowered_text:
+        parsed = parsed.replace(hour=21, minute=0)
+
     start_time = parsed
     end_time = parsed + datetime.timedelta(minutes=DEFAULT_DURATION_MINUTES)
     return start_time, end_time
+
 
 def is_available(start_time, end_time):
     events = service.events().list(
