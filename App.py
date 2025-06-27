@@ -75,9 +75,12 @@ def handle_query(user_input):
     lower = user_input.lower()
     now = datetime.datetime.now()
 
-    if "week" in lower:
-        start = now
-        end = now + datetime.timedelta(days=7)
+    if "next week" in lower or "coming week" in lower:
+        today = datetime.datetime.now()
+        days_ahead = 7 - today.weekday()  # days until next Monday
+        start = today + datetime.timedelta(days=days_ahead)
+        start = start.replace(hour=0, minute=0, second=0, microsecond=0)
+        end = start + datetime.timedelta(days=7)
 
     elif "right now" in lower:
         start = now
