@@ -120,8 +120,9 @@ def handle_booking(user_input):
     if not start or not end:
         return "🕵️‍♂️ Hmm... I couldn’t get the date/time. Try something like 'Book 5th July 3PM'."
     if is_available(start, end):
-        create_appointment("Meeting via TailorTalk", start, end)
-        return f"🎉 You're locked in for {start.strftime('%A, %d %B %Y at %I:%M %p')}!"
+        readable_time = start.strftime('%A, %d %B %Y at %I:%M %p')
+        st.session_state.pending_booking = (start, end)
+        return f"🤖 I found a free slot on {readable_time}. Should I book it for you? (Type 'yes' to confirm)"
     else:
         return f"🚫 That time's already taken: {start.strftime('%A, %d %B %Y at %I:%M %p')}. Try something else."
 
@@ -206,10 +207,16 @@ if "history" not in st.session_state:
 # Chat
 user_input = st.chat_input("Type something like 'Next Monday 5PM' or 'Am I booked tomorrow?'")
 if user_input:
-    st.session_state.history.append(("user", user_input))
-    with st.spinner("🧠 Thinking like a calendar ninja..."):
+      if "yes" in user_input.lower() and st.session_state.get("pending_booking"):
+        start, end = st.session_state.pending_booking
+        create_appointment("Meeting via TailorTalk", start, end)
+        st.session_state.pending_booking = None
+        reply = f"✅ Your appointment is confirmed for {start.strftime('%A, %d %B %Y at %I:%M %p')}!"
+      else:
         reply = handle_input(user_input)
-    st.session_state.history.append(("bot", reply))
+
+      st.session_state.history.append(("user", user_input))
+      st.session_state.history.append(("bot", reply))
 
 # Display Chat
 st.markdown("<div class='chat-container'>", unsafe_allow_html=True)
