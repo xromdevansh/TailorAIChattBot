@@ -7,6 +7,8 @@ from googleapiclient.discovery import build
 from dateparser.search import search_dates
 import re
 import calendar
+from pytz import timezone
+
 # Load secrets
 GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 genai.configure(api_key=GEMINI_API_KEY)
@@ -100,7 +102,8 @@ def create_appointment(summary, start_time, end_time):
 
 def handle_query(user_input):
     lower = user_input.lower()
-    now = datetime.datetime.now()
+    IST = timezone("Asia/Kolkata")
+    now = datetime.datetime.now(IST)
 
     # Match common patterns
     if "next week" in lower or "coming week" in lower:
