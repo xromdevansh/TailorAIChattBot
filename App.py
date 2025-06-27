@@ -1,4 +1,4 @@
-# TailorTalk - Fully Merged Streamlit App (Single File)
+# TailorTalk - ✨ Unique Styled AI Appointment Bot
 
 import streamlit as st
 import datetime
@@ -7,11 +7,9 @@ import google.generativeai as genai
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from dateparser.search import search_dates
-from dotenv import load_dotenv
 
-# Load environment
-load_dotenv()
-GEMINI_API_KEY = st.secrets("GEMINI_API_KEY")
+# Secrets from Streamlit Cloud
+GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 
 # Configure Gemini
 genai.configure(api_key=GEMINI_API_KEY)
@@ -19,12 +17,11 @@ model = genai.GenerativeModel("gemini-pro")
 
 # Calendar API setup
 SCOPES = ['https://www.googleapis.com/auth/calendar']
-CALENDAR_ID = 'primary'
-
+SERVICE_ACCOUNT_INFO = st.secrets["gcp_service_account"]
 credentials = service_account.Credentials.from_service_account_info(
-    st.secrets["gcp_service_account"],
-    scopes=SCOPES)
+    SERVICE_ACCOUNT_INFO, scopes=SCOPES)
 service = build('calendar', 'v3', credentials=credentials)
+CALENDAR_ID = 'primary'
 
 # Utils
 DEFAULT_DURATION_MINUTES = 30
@@ -68,28 +65,77 @@ def create_appointment(summary, start_time, end_time):
 def handle_input(user_input):
     start, end = extract_datetime_range(user_input)
     if not start or not end:
-        return "⚠️ I couldn't understand the date/time. Please try something like 'Book on 20 July at 4 PM'."
+        return "🕵️‍♂️ Hmm... I couldn’t get the date/time. Try saying something like 'Book 5th July 3PM'."
     if is_available(start, end):
         create_appointment("Meeting via TailorTalk", start, end)
-        return f"You're booked on {start.strftime('%A, %d %B %Y at %I:%M %p')}!"
+        return f"🎉 You're locked in for {start.strftime('%A, %d %B %Y at %I:%M %p')}!"
     else:
-        return f"You already have an appointment booked at {start.strftime('%A, %d %B %Y at %I:%M %p')}. Please choose another slot."
+        return f"🚫 That time's already taken! Try something else."
 
-# Streamlit UI Setup
-st.set_page_config(page_title="TailorTalk AI", page_icon="None", layout="centered")
+# 🌈 Custom Styling
+st.set_page_config(page_title="TailorTalk ✨", page_icon="🧠", layout="centered")
+st.markdown("""
+    <style>
+    body { background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%) }
+    .stApp { font-family: 'Segoe UI', sans-serif; background-color: #fefefe; }
+    .chat-container {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        margin-top: 2rem;
+        padding: 1rem 1rem;
+    }
+    .user-msg {
+        background: linear-gradient(120deg, #a1ffce, #faffd1);
+        color: #111;
+        padding: 12px 18px;
+        border-radius: 20px 20px 0px 20px;
+        align-self: flex-end;
+        max-width: 80%;
+        font-size: 15px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .bot-msg {
+        background: #ffffffcc;
+        color: #222;
+        padding: 12px 18px;
+        border-radius: 20px 20px 20px 0px;
+        align-self: flex-start;
+        max-width: 80%;
+        font-size: 15px;
+        border-left: 4px solid #007acc;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .title-style {
+        font-size: 2.2rem;
+        font-weight: 700;
+        color: #1a1a1a;
+        background: linear-gradient(to right, #007acc, #00c3ff);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
+# 🧵 App Title & Instructions
+st.markdown("<h1 class='title-style'>TailorTalk 🤖</h1>", unsafe_allow_html=True)
+st.caption("Your AI-powered scheduling buddy. Just tell me when you're free!")
 
-st.title("TailorTalk - Book Appointments")
-st.subheader("Let me schedule your meetings!!")
-
+# Session State
 if "history" not in st.session_state:
     st.session_state.history = []
 
-user_input = st.chat_input("Ask me to book an appointment with date/time...")
-
+# 💬 Chat Input
+user_input = st.chat_input("Type something like 'Next Monday 5PM'...")
 if user_input:
     st.session_state.history.append(("user", user_input))
-    with st.spinner("Thinking..."):
+    with st.spinner("🧠 Thinking like a calendar ninja..."):
         reply = handle_input(user_input)
     st.session_state.history.append(("bot", reply))
 
+# 🔄 Display Chat
+st.markdown("<div class='chat-container'>", unsafe_allow_html=True)
+for sender, msg in st.session_state.history:
+    msg_class = "user-msg" if sender == "user" else "bot-msg"
+    st.markdown(f"<div class='{msg_class}'>{msg}</div>", unsafe_allow_html=True)
+st.markdown("</div>", unsafe_allow_html=True)
