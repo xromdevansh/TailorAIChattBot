@@ -113,17 +113,26 @@ def handle_booking(user_input):
 def handle_input(user_input):
     lower = user_input.lower()
 
-    # Extended intent detection
-    is_checking = any(kw in lower for kw in [
-        "do i have", "am i free", "anything booked", 
-        "appointment", "what's scheduled", "is anything", 
-        "free on", "available", "booked for", "calendar"
+    # Keywords that suggest booking
+    is_booking = any(kw in lower for kw in [
+        "book", "schedule", "make an appointment", "set up"
     ])
 
-    if is_checking:
+    # Keywords that suggest checking availability or listing
+    is_checking = any(kw in lower for kw in [
+        "do i have", "am i free", "anything booked", "appointment",
+        "what's scheduled", "is anything", "free on", "available",
+        "calendar", "do i", "check", "show me"
+    ])
+
+    if is_booking:
+        return handle_booking(user_input)
+    elif is_checking:
         return handle_query(user_input)
     else:
+        # fallback: try to book by default
         return handle_booking(user_input)
+
 
 # ------------------ UI ------------------
 
