@@ -102,11 +102,14 @@ def handle_query(user_input):
         seen = set()
         event_lines = []
         for e in events:
+            summary = e.get('summary', 'No Title')
             start_time = e['start'].get('dateTime', e['start'].get('date'))
-            event_key = (e['summary'], start_time)
-            if event_key not in seen:
-                seen.add(event_key)
-                event_lines.append(f"📅 {e['summary']} at {start_time}")
+            key = f"{summary}-{start_time}"
+            if key not in seen:
+                seen.add(key)
+                # Format to readable datetime
+                readable_time = datetime.datetime.fromisoformat(start_time.replace("Z", "")).strftime('%A, %d %B %Y at %I:%M %p')
+                event_lines.append(f"📅 {summary} at {readable_time}")
         return "Here’s what’s on your calendar:\n" + "\n".join(event_lines)
     else:
         return "✅ You're totally free during that time!"
