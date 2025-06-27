@@ -1,5 +1,3 @@
-# TailorTalk - ✨ Unique Styled AI Appointment Bot
-
 import streamlit as st
 import datetime
 import os
@@ -8,10 +6,8 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from dateparser.search import search_dates
 
-# Secrets from Streamlit Cloud
+# Load secrets
 GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
-
-# Configure Gemini
 genai.configure(api_key=GEMINI_API_KEY)
 model = genai.GenerativeModel("gemini-pro")
 
@@ -23,8 +19,9 @@ credentials = service_account.Credentials.from_service_account_info(
 service = build('calendar', 'v3', credentials=credentials)
 CALENDAR_ID = 'primary'
 
-# Utils
 DEFAULT_DURATION_MINUTES = 30
+
+# ------------------ UTIL FUNCTIONS ------------------
 
 def extract_datetime_range(text):
     results = search_dates(
@@ -53,6 +50,16 @@ def is_available(start_time, end_time):
     ).execute()
     return len(events.get('items', [])) == 0
 
+def get_events_between(start_time, end_time):
+    events = service.events().list(
+        calendarId=CALENDAR_ID,
+        timeMin=start_time.isoformat() + 'Z',
+        timeMax=end_time.isoformat() + 'Z',
+        singleEvents=True,
+        orderBy='startTime'
+    ).execute()
+    return events.get('items', [])
+
 def create_appointment(summary, start_time, end_time):
     event = {
         'summary': summary,
@@ -62,21 +69,54 @@ def create_appointment(summary, start_time, end_time):
     created_event = service.events().insert(calendarId=CALENDAR_ID, body=event).execute()
     return created_event.get('htmlLink')
 
-def handle_input(user_input):
+# ------------------ HANDLERS ------------------
+
+def handle_query(user_input):
+    lower = user_input.lower()
+    now = datetime.datetime.now()
+
+    if "week" in lower:
+        start = now
+        end = now + datetime.timedelta(days=7)
+    elif "right now" in lower:
+        start = now
+        end = now + datetime.timedelta(minutes=30)
+    else:
+        start, end = extract_datetime_range(user_input)
+        if not start or not end:
+            return "❓ I couldn't understand the time. Try something like 'Next Monday 3PM'."
+
+    events = get_events_between(start, end)
+    if events:
+        event_lines = [f"📅 {e['summary']} at {e['start'].get('dateTime', e['start'].get('date'))}" for e in events]
+        return "Here’s what’s on your calendar:\n" + "\n".join(event_lines)
+    else:
+        return "✅ You're totally free during that time!"
+
+def handle_booking(user_input):
     start, end = extract_datetime_range(user_input)
     if not start or not end:
-        return "🕵️‍♂️ Hmm... I couldn’t get the date/time. Try saying something like 'Book 5th July 3PM'."
+        return "🕵️‍♂️ Hmm... I couldn’t get the date/time. Try something like 'Book 5th July 3PM'."
     if is_available(start, end):
         create_appointment("Meeting via TailorTalk", start, end)
         return f"🎉 You're locked in for {start.strftime('%A, %d %B %Y at %I:%M %p')}!"
     else:
-        return f"🚫 That time's already taken! Try something else."
+        return f"🚫 That time's already taken: {start.strftime('%A, %d %B %Y at %I:%M %p')}. Try something else."
 
-# 🌈 Custom Styling
+def handle_input(user_input):
+    lower = user_input.lower()
+    if any(x in lower for x in ["do i have", "am i free", "appointment", "next week", "right now", "at this time"]):
+        return handle_query(user_input)
+    else:
+        return handle_booking(user_input)
+
+# ------------------ UI ------------------
+
 st.set_page_config(page_title="TailorTalk ✨", page_icon="🧠", layout="centered")
+
+# CSS
 st.markdown("""
     <style>
-    body { background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%) }
     .stApp { font-family: 'Segoe UI', sans-serif; background-color: #fefefe; }
     .chat-container {
         display: flex;
@@ -117,15 +157,14 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# 🧵 App Title & Instructions
 st.markdown("<h1 class='title-style'>TailorTalk 🤖</h1>", unsafe_allow_html=True)
 st.caption("Your AI-powered scheduling buddy. Just tell me when you're free!")
 
-# Session State
+# Session
 if "history" not in st.session_state:
     st.session_state.history = []
 
-# 💬 Chat Input
+# Chat
 user_input = st.chat_input("Type something like 'Next Monday 5PM'...")
 if user_input:
     st.session_state.history.append(("user", user_input))
@@ -133,7 +172,7 @@ if user_input:
         reply = handle_input(user_input)
     st.session_state.history.append(("bot", reply))
 
-# 🔄 Display Chat
+# Display Chat
 st.markdown("<div class='chat-container'>", unsafe_allow_html=True)
 for sender, msg in st.session_state.history:
     msg_class = "user-msg" if sender == "user" else "bot-msg"
